@@ -1,28 +1,20 @@
 #!/usr/bin/env bash
 #
-# bump.sh — prepare a release-bump commit locally.
+# bump.sh — bump the workspace version and commit on the current branch.
 #
 # Usage:
-#   dev/scripts/bump.sh patch                # X.Y.Z → X.Y.(Z+1)
-#   dev/scripts/bump.sh minor                # X.Y.Z → X.(Y+1).0
-#   dev/scripts/bump.sh major                # X.Y.Z → (X+1).0.0
-#   dev/scripts/bump.sh 1.0.0-rc.1           # explicit version (any SemVer)
-#   dev/scripts/bump.sh 0.16.5               # explicit version (e.g., hotfix)
+#   bump.sh patch                # X.Y.Z → X.Y.(Z+1)
+#   bump.sh minor                # X.Y.Z → X.(Y+1).0
+#   bump.sh major                # X.Y.Z → (X+1).0.0
+#   bump.sh 1.0.0-rc.1           # explicit version (any SemVer)
+#   bump.sh 0.16.5               # explicit version (e.g., hotfix)
 #
-#   dev/scripts/bump.sh --edit-only <bump>   # edit files only, no git
+#   bump.sh --edit-only <bump>   # rewrite files only, no commit
 #
-# Branches off origin/main, bumps both version strings in
-# `Cargo.toml`, refreshes `Cargo.lock`, and commits on
-# `bump/vX.Y.Z`. Stops there. Run `dev/scripts/bump-pr.sh` to push
-# the branch and open the PR.
-#
-# Idempotent: re-running with the same version resets the bump
-# branch to a fresh state. The push + PR step is force-with-lease,
-# so re-runs converge.
-#
-# With --edit-only, only rewrites `Cargo.toml` + `Cargo.lock` in
-# the working tree and exits. No clean-tree check, no branch, no
-# commit.
+# Edits both version strings in `Cargo.toml`, refreshes `Cargo.lock`,
+# and commits the result on whatever branch you're currently on. No
+# branch creation, no fetch, no push, no PR — that's `bump-pr.sh`'s
+# job.
 
 set -euo pipefail
 
@@ -54,16 +46,6 @@ done
 if [[ -z "$BUMP" ]]; then
     echo "Usage: bump.sh [--edit-only] patch | minor | major | <X.Y.Z>" >&2
     exit 1
-fi
-
-# Pre-flight ------------------------------------------------------------------
-
-if (( ! EDIT_ONLY )); then
-    echo "→ pre-flight: clean working tree"
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo "Error: working tree is dirty — commit or stash first" >&2
-        exit 1
-    fi
 fi
 
 # Read current version + compute new -----------------------------------------
@@ -101,18 +83,6 @@ echo
 echo "Bumping $CURRENT → $NEW"
 echo
 
-# Sync main locally + branch off it ------------------------------------------
-
-if (( ! EDIT_ONLY )); then
-    echo "→ fetching origin/main"
-    git fetch origin main
-
-    BRANCH="bump/v$NEW"
-
-    echo "→ creating bump branch $BRANCH from origin/main"
-    git checkout -B "$BRANCH" origin/main
-fi
-
 # Edit Cargo.toml -------------------------------------------------------------
 
 # Portable in-place sed (BSD on macOS uses `-i ''`, GNU on Linux uses `-i`).
@@ -140,14 +110,13 @@ cargo check --workspace
 
 if (( EDIT_ONLY )); then
     echo
-    echo "Edited Cargo.toml + Cargo.lock for v$NEW. No git operations performed."
+    echo "Edited Cargo.toml + Cargo.lock for v$NEW. No commit made."
     exit 0
 fi
 
-echo "→ committing"
+echo "→ committing on $(git rev-parse --abbrev-ref HEAD)"
 git add Cargo.toml Cargo.lock
 git commit -m "Release v$NEW"
 
 echo
-echo "Bump committed locally on $BRANCH."
-echo "Run dev/scripts/bump-pr.sh to push the branch and open the PR."
+echo "Bump committed. Run bump-pr.sh to push and open the PR."
