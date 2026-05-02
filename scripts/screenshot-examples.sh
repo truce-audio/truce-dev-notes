@@ -7,12 +7,12 @@
 #   crate = `truce-example-<short>`  (e.g. truce-example-gain → gain)
 #   os    = windows | macos | linux
 #
-# Lives in `truce-dev-notes/` next to the truce repo; cd's into the
-# sibling `truce/` workspace so screenshot output paths resolve there.
+# Lives in `truce-dev-notes/scripts/` next to the truce repo; cd's into
+# the sibling `truce/` workspace so screenshot output paths resolve there.
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../truce"
+cd "$(dirname "$0")/../../truce"
 
 case "$(uname -s)" in
     Darwin)                                            os=macos;   cargo=cargo ;;
