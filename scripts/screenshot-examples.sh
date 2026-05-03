@@ -6,6 +6,9 @@
 # Naming: examples/<crate>/screenshots/<short>_default_<os>.png
 #   crate = `truce-example-<short>`  (e.g. truce-example-gain → gain)
 #   os    = windows | macos | linux
+# Hyphens in `<short>` are converted to underscores so the filename
+# matches the path passed to `truce_test::screenshot!()` in source —
+# that macro resolves its arg literally, not via crate-name munging.
 #
 # Lives in `truce-dev-notes/scripts/` next to the truce repo; cd's into
 # the sibling `truce/` workspace so screenshot output paths resolve there.
@@ -37,6 +40,7 @@ failed=()
 for crate_dir in examples/truce-example-*/; do
     crate=$(basename "$crate_dir")
     short=${crate#truce-example-}
+    short=${short//-/_}
     out_dir="$crate_dir/screenshots"
     out="$out_dir/${short}_default_${os}.png"
 
