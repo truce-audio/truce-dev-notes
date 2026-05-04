@@ -69,15 +69,27 @@ SHIM_VERSION="$(awk -F\" '
     /^truce-shim-types = / { print $2; exit }
 ' Cargo.toml)"
 
+BUILD_VERSION="$(awk -F\" '
+    /^truce-build = / { print $2; exit }
+' Cargo.toml)"
+
+UTILS_VERSION="$(awk -F\" '
+    /^truce-utils = / { print $2; exit }
+' Cargo.toml)"
+
 if [[ -z "$WS_VERSION" ]]; then
     echo "Error: could not read [workspace.package].version" >&2
     exit 1
 fi
 
-if [[ "$WS_VERSION" != "$SHIM_VERSION" ]]; then
+if [[ "$WS_VERSION" != "$SHIM_VERSION" \
+   || "$WS_VERSION" != "$BUILD_VERSION" \
+   || "$WS_VERSION" != "$UTILS_VERSION" ]]; then
     echo "Error: version drift in Cargo.toml" >&2
-    echo "  [workspace.package].version              = $WS_VERSION" >&2
+    echo "  [workspace.package].version               = $WS_VERSION" >&2
     echo "  [workspace.dependencies].truce-shim-types = $SHIM_VERSION" >&2
+    echo "  [workspace.dependencies].truce-build      = $BUILD_VERSION" >&2
+    echo "  [workspace.dependencies].truce-utils      = $UTILS_VERSION" >&2
     exit 1
 fi
 
@@ -111,25 +123,51 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Step 2 — publish truce-shim-types
+# Step 2 — publish leaf crates consumed by cargo-truce
+#
+# `truce-shim-types`, `truce-build`, and `truce-utils` are all pulled
+# in by `cargo-truce`'s lib half. None of them depend on each other,
+# so order between them doesn't matter — but all three must land on
+# the registry before `cargo publish -p cargo-truce` will resolve.
 # ----------------------------------------------------------------------------
+
+PUBLISHED_ANY=0
 
 echo
 echo "→ publishing truce-shim-types $WS_VERSION"
 if is_published_on_crates_io truce-shim-types "$WS_VERSION"; then
     echo "  already on crates.io; skipping"
-    SKIP_SLEEP=1
 else
     cargo publish -p truce-shim-types --dry-run
     cargo publish -p truce-shim-types
-    SKIP_SLEEP=0
+    PUBLISHED_ANY=1
+fi
+
+echo
+echo "→ publishing truce-build $WS_VERSION"
+if is_published_on_crates_io truce-build "$WS_VERSION"; then
+    echo "  already on crates.io; skipping"
+else
+    cargo publish -p truce-build --dry-run
+    cargo publish -p truce-build
+    PUBLISHED_ANY=1
+fi
+
+echo
+echo "→ publishing truce-utils $WS_VERSION"
+if is_published_on_crates_io truce-utils "$WS_VERSION"; then
+    echo "  already on crates.io; skipping"
+else
+    cargo publish -p truce-utils --dry-run
+    cargo publish -p truce-utils
+    PUBLISHED_ANY=1
 fi
 
 # ----------------------------------------------------------------------------
 # Step 3 — wait for index propagation (only if we just published)
 # ----------------------------------------------------------------------------
 
-if [[ "$SKIP_SLEEP" == "0" ]]; then
+if [[ "$PUBLISHED_ANY" == "1" ]]; then
     echo
     echo "→ sleeping 30s for crates.io index propagation"
     sleep 30
@@ -170,8 +208,9 @@ if is_github_release_present "$TAG"; then
     echo "  already exists: $release_url"
 else
     gh release create "$TAG" \
-        --generate-notes \
         --title "truce $WS_VERSION"
+#
+#        --generate-notes \
 fi
 
 # ----------------------------------------------------------------------------
